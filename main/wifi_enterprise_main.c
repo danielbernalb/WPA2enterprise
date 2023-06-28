@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "driver/uart.h"
 #include "esp_wifi.h"
 #include "esp_wpa2.h"
 #include "esp_event.h"
@@ -30,20 +31,23 @@
 #include "esp_netif.h"
 
 /* The examples use simple WiFi configuration that you can set via
-   project configuration menu.
+   'make menuconfig'.
 
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 
-   You can choose EAP method via project configuration according to the
+   You can choose EAP method via 'make menuconfig' according to the
    configuration of AP.
 */
-#define EXAMPLE_WIFI_SSID CONFIG_EXAMPLE_WIFI_SSID
-#define EXAMPLE_EAP_METHOD CONFIG_EXAMPLE_EAP_METHOD
+//#define EXAMPLE_WIFI_SSID "SED CORPORATIVO"
+//#define EXAMPLE_EAP_ID "wiedctabora"
+//#define EXAMPLE_EAP_USERNAME "wiedctabora"
+//#define EXAMPLE_EAP_PASSWORD "OZ4\"Xbk0"
 
-#define EXAMPLE_EAP_ID CONFIG_EXAMPLE_EAP_ID
-#define EXAMPLE_EAP_USERNAME CONFIG_EXAMPLE_EAP_USERNAME
-#define EXAMPLE_EAP_PASSWORD CONFIG_EXAMPLE_EAP_PASSWORD
+#define EXAMPLE_WIFI_SSID "TPwpa2"
+#define EXAMPLE_EAP_ID "prueba1"
+#define EXAMPLE_EAP_USERNAME "prueba1"
+#define EXAMPLE_EAP_PASSWORD "daniel2022"
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t wifi_event_group;
@@ -58,56 +62,24 @@ const int CONNECTED_BIT = BIT0;
 
 static const char *TAG = "example";
 
-/* CA cert, taken from ca.pem
-   Client cert, taken from client.crt
-   Client key, taken from client.key
-
-   The PEM, CRT and KEY file were provided by the person or organization
-   who configured the AP with wpa2 enterprise.
-
-   To embed it in the app binary, the PEM, CRT and KEY file is named
-   in the component.mk COMPONENT_EMBED_TXTFILES variable.
-*/
-#ifdef CONFIG_EXAMPLE_VALIDATE_SERVER_CERT
-extern uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
-extern uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
-#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */
-
-#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
-extern uint8_t client_crt_start[] asm("_binary_client_crt_start");
-extern uint8_t client_crt_end[]   asm("_binary_client_crt_end");
-extern uint8_t client_key_start[] asm("_binary_client_key_start");
-extern uint8_t client_key_end[]   asm("_binary_client_key_end");
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
-
-#if defined CONFIG_EXAMPLE_EAP_METHOD_TTLS
-esp_eap_ttls_phase2_types TTLS_PHASE2_METHOD = CONFIG_EXAMPLE_EAP_METHOD_TTLS_PHASE_2;
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_TTLS */
-
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
+        ESP_LOGI(TAG, "WIFI_EVENT_STA_START");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         esp_wifi_connect();
         xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+        ESP_LOGI(TAG, "WIFI_EVENT_STA_DISCONNECTED");    
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+        ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
     }
 }
 
 static void initialise_wifi(void)
 {
-#ifdef CONFIG_EXAMPLE_VALIDATE_SERVER_CERT
-    unsigned int ca_pem_bytes = ca_pem_end - ca_pem_start;
-#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */
-
-#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
-    unsigned int client_crt_bytes = client_crt_end - client_crt_start;
-    unsigned int client_key_bytes = client_key_end - client_key_start;
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
-
     ESP_ERROR_CHECK(esp_netif_init());
     wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -115,53 +87,36 @@ static void initialise_wifi(void)
     assert(sta_netif);
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
-    ESP_ERROR_CHECK( esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL) );
-    ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL) );
-    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
         .sta = {
             .ssid = EXAMPLE_WIFI_SSID,
-#if defined (CONFIG_EXAMPLE_WPA3_192BIT_ENTERPRISE)
-            .pmf_cfg = {
-                .required = true
-            },
-#endif
         },
     };
-    ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EXAMPLE_EAP_ID, strlen(EXAMPLE_EAP_ID)) );
+    ESP_LOGI(TAG, "SSID: %s", EXAMPLE_WIFI_SSID);
+    ESP_LOGI(TAG, "Identity: %s", EXAMPLE_EAP_ID);
+    ESP_LOGI(TAG, "Password: %s", EXAMPLE_EAP_PASSWORD);
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    esp_wifi_sta_wpa2_ent_clear_identity();
+    esp_wifi_sta_wpa2_ent_clear_username();
+    esp_wifi_sta_wpa2_ent_clear_password();
+    esp_wifi_sta_wpa2_ent_clear_new_password();
+    esp_wifi_sta_wpa2_ent_clear_ca_cert();
+    esp_wifi_sta_wpa2_ent_clear_cert_key();
+//    esp_wifi_sta_wpa2_ent_set_disable_time_check(false);
 
-#if defined(CONFIG_EXAMPLE_VALIDATE_SERVER_CERT) || \
-    defined(CONFIG_EXAMPLE_WPA3_ENTERPRISE) || \
-    defined(CONFIG_EXAMPLE_WPA3_192BIT_ENTERPRISE)
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_ca_cert(ca_pem_start, ca_pem_bytes) );
-#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */ /* EXAMPLE_WPA3_ENTERPRISE */
+    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_ent_set_identity((uint8_t*)EXAMPLE_EAP_ID, strlen(EXAMPLE_EAP_ID)));
+    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_ent_set_username((uint8_t*)EXAMPLE_EAP_USERNAME, strlen(EXAMPLE_EAP_USERNAME)));
+    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_ent_set_password((uint8_t*)EXAMPLE_EAP_PASSWORD, strlen(EXAMPLE_EAP_PASSWORD)));
+    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_ent_enable());
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_LOGI(TAG, "Wifi start");
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
 
-#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_cert_key(client_crt_start, client_crt_bytes,\
-    		client_key_start, client_key_bytes, NULL, 0) );
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
-
-#if defined CONFIG_EXAMPLE_EAP_METHOD_PEAP || CONFIG_EXAMPLE_EAP_METHOD_TTLS
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_username((uint8_t *)EXAMPLE_EAP_USERNAME, strlen(EXAMPLE_EAP_USERNAME)) );
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_password((uint8_t *)EXAMPLE_EAP_PASSWORD, strlen(EXAMPLE_EAP_PASSWORD)) );
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_PEAP || CONFIG_EXAMPLE_EAP_METHOD_TTLS */
-
-#if defined CONFIG_EXAMPLE_EAP_METHOD_TTLS
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_ttls_phase2_method(TTLS_PHASE2_METHOD) );
-#endif /* CONFIG_EXAMPLE_EAP_METHOD_TTLS */
-#if defined (CONFIG_EXAMPLE_WPA3_192BIT_ENTERPRISE)
-    ESP_LOGI(TAG, "Enabling 192 bit certification");
-    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_set_suiteb_192bit_certification(true));
-#endif
-#ifdef CONFIG_EXAMPLE_USE_DEFAULT_CERT_BUNDLE
-    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_use_default_cert_bundle(true));
-#endif
-    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_enable() );
-    ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
 static void wpa2_enterprise_example_task(void *pvParameters)
@@ -179,13 +134,29 @@ static void wpa2_enterprise_example_task(void *pvParameters)
             ESP_LOGI(TAG, "MASK:"IPSTR, IP2STR(&ip.netmask));
             ESP_LOGI(TAG, "GW:"IPSTR, IP2STR(&ip.gw));
             ESP_LOGI(TAG, "~~~~~~~~~~~");
+		//	Serial.println("task");
+        ESP_LOGI(TAG, "task");
         }
     }
 }
 
-void app_main(void)
+void app_main()
 {
-    ESP_ERROR_CHECK( nvs_flash_init() );
+     // Configure parameters of an UART driver,
+    // communication pins and install the driver
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+    };
+    uart_param_config(CONFIG_ESP_CONSOLE_UART_NUM, &uart_config);
+
+    // Install UART driver, and get the queue.
+    uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM, 0, 0, 0, NULL, 0);
+    ESP_ERROR_CHECK(nvs_flash_init());
     initialise_wifi();
     xTaskCreate(&wpa2_enterprise_example_task, "wpa2_enterprise_example_task", 4096, NULL, 5, NULL);
+    ESP_LOGI(TAG, "main");
 }
