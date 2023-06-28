@@ -13,5 +13,8 @@
         "target/esp32.cfg"
     ],
     "idf.pythonBinPathWin": "c:\\esp32\\python_env\\idf5.0_py3.8_env\\Scripts\\python.exe",
-    "idf.toolsPathWin": "c:\\esp32"
+    "idf.toolsPathWin": "c:\\esp32",
+    "files.associations": {
+        "freertos.h": "c"
+    }
 }
